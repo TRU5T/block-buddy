@@ -23,6 +23,8 @@ for pair in filter(None, (p.strip() for p in os.environ.get("SERVERS", "").split
 
 MODEL = os.environ.get("MODEL", "claude-sonnet-5-5")
 PIN = os.environ.get("PIN", "")
+# These models return 400 for tool_choice {"type": "tool"} and {"type": "any"}.
+NO_FORCED_TOOL = ("sonnet-5-5", "opus-5-5", "fable-5-1", "mythos-5-1")
 BATCH = 60
 CMDS_PER_SEC = 20  # BDS runs about one console command per game tick
 EYE_HEIGHT = 1.62  # querytarget's y is the player's eyes, 1.62 above their feet
@@ -54,9 +56,11 @@ SYSTEM_PROMPT = Path(__file__).with_name("prompt.md").read_text()
 
 BUILD_TOOL = {
     "name": "submit_build",
-    "description": "Submit the build plan.",
+    "description": "Submit the build plan. Call this for every request.",
+    "strict": True,
     "input_schema": {
         "type": "object",
+        "additionalProperties": False,
         "properties": {
             "title": {"type": "string", "description": "Short name for the build"},
             "message": {"type": "string", "description": "One or two cheerful sentences to the kid about what you built"},
@@ -64,6 +68,7 @@ BUILD_TOOL = {
                 "type": "array",
                 "items": {
                     "type": "object",
+                    "additionalProperties": False,
                     "properties": {
                         "op": {"type": "string", "enum": ["box", "clear", "block", "cylinder", "sphere", "pyramid"]},
                         "block": {"type": "string"},
@@ -172,6 +177,47 @@ def _check_pin(pin):
         raise HTTPException(401, "Wrong PIN")
 
 
+def _tool_choice(model):
+    """Sonnet 5.5 and a few siblings reject forced tool use. auto still calls the tool when asked."""
+    if any(tag in model for tag in NO_FORCED_TOOL):
+        return {"type": "auto"}
+    return {"type": "tool", "name": "submit_build"}
+
+
+def _plan_from(resp):
+    return next((b.input for b in resp.content if b.type == "tool_use" and b.name == "submit_build"), None)
+
+
+def _request_plan(prompt):
+    messages = [{"role": "user", "content": prompt}]
+    choice = _tool_choice(MODEL)
+
+    def create(tool_choice):
+        return llm.messages.create(
+            model=MODEL,
+            max_tokens=8000,
+            system=SYSTEM_PROMPT,
+            tools=[BUILD_TOOL],
+            tool_choice=tool_choice,
+            messages=messages,
+        )
+
+    try:
+        resp = create(choice)
+    except anthropic.BadRequestError as e:
+        if choice["type"] == "auto" or "not supported for this model" not in str(e):
+            raise
+        choice = {"type": "auto"}
+        resp = create(choice)
+    plan = _plan_from(resp)
+    if plan is None and choice["type"] == "auto":
+        # Keep the assistant turn intact so thinking blocks stay valid, then ask once more.
+        messages.append({"role": "assistant", "content": resp.content})
+        messages.append({"role": "user", "content": "Call the submit_build tool now with the complete plan."})
+        plan = _plan_from(create(choice))
+    return plan
+
+
 # ---------- API ----------
 class BuildReq(BaseModel):
     server: str
@@ -227,16 +273,7 @@ async def build(req: BuildReq):
         pos, yaw = await asyncio.to_thread(_locate, c, req.player)
         await asyncio.to_thread(_send, c, [_tell(req.player, f"Block Buddy is thinking about: {prompt}")])
 
-        resp = await asyncio.to_thread(
-            llm.messages.create,
-            model=MODEL,
-            max_tokens=8000,
-            system=SYSTEM_PROMPT,
-            tools=[BUILD_TOOL],
-            tool_choice={"type": "tool", "name": "submit_build"},
-            messages=[{"role": "user", "content": prompt}],
-        )
-        plan = next((b.input for b in resp.content if b.type == "tool_use"), None)
+        plan = await asyncio.to_thread(_request_plan, prompt)
         if not plan:
             raise HTTPException(502, "The builder didn't come back with a plan. Try again.")
 
