@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Block Buddy</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --sky: #9ed8f5; --sky-deep: #6fbfe8;
+    --grass: #6bbf59; --grass-dark: #4a9a3c;
+    --dirt: #7b5236; --dirt-dark: #5a3b26;
+    --stone: #6e737b; --paper: #ffffff; --ink: #1f2a33; --muted: #55606b;
+    --warn: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; color: var(--ink);
+    font: 500 1.05rem/1.5 "Nunito", system-ui, sans-serif;
+    background: linear-gradient(var(--sky) 0 70%, var(--grass) 70% 72%, var(--dirt) 72%);
+    background-attachment: fixed;
+  }
+  main { max-width: 560px; margin: 0 auto; padding: 28px 18px 60px; }
+  h1 {
+    font: 700 2.6rem/1 "Pixelify Sans", monospace; margin: 0 0 4px; color: var(--ink);
+    text-shadow: 3px 3px 0 #ffffffaa;
+  }
+  .lede { margin: 0 0 22px; color: #24465a; font-weight: 700; }
+  .panel {
+    background: var(--paper); border: 3px solid var(--ink); padding: 18px;
+    box-shadow: 6px 6px 0 var(--ink);
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  label { display: block; font-weight: 800; font-size: .9rem; margin-bottom: 4px; }
+  select, textarea, input {
+    width: 100%; font: inherit; color: var(--ink); background: #f3f7f9;
+    border: 2px solid var(--stone); padding: 10px; border-radius: 0;
+  }
+  select:focus-visible, textarea:focus-visible, input:focus-visible, button:focus-visible {
+    outline: 3px solid var(--sky-deep); outline-offset: 2px;
+  }
+  .player { display: flex; gap: 6px; }
+  .player select { flex: 1; }
+  .icon-btn {
+    border: 2px solid var(--stone); background: #f3f7f9; font: 800 1.1rem "Nunito"; width: 46px; cursor: pointer;
+  }
+  textarea { min-height: 96px; resize: vertical; font-size: 1.15rem; }
+  .ideas { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 20px; }
+  .ideas button {
+    font: 700 .9rem "Nunito"; background: #eaf6ec; color: var(--grass-dark);
+    border: 2px solid var(--grass); padding: 5px 10px; cursor: pointer;
+  }
+
+  /* The block button: the one bold thing */
+  .build {
+    display: block; width: 100%; position: relative; cursor: pointer;
+    font: 700 1.7rem/1 "Pixelify Sans", monospace; color: #fff; letter-spacing: .02em;
+    padding: 26px 10px 22px; border: 3px solid var(--ink);
+    background:
+      linear-gradient(var(--grass) 0 18px, var(--grass-dark) 18px 22px, transparent 22px),
+      repeating-linear-gradient(90deg, var(--dirt) 0 14px, var(--dirt-dark) 14px 16px);
+    text-shadow: 2px 2px 0 var(--dirt-dark);
+    box-shadow: 0 8px 0 var(--ink);
+    transition: transform .08s, box-shadow .08s;
+  }
+  .build:active:not(:disabled) { transform: translateY(6px); box-shadow: 0 2px 0 var(--ink); }
+  .build:disabled { filter: grayscale(.5); cursor: progress; }
+  .build.busy span { animation: bob .6s steps(2) infinite; display: inline-block; }
+  @keyframes bob { 50% { transform: translateY(-4px); } }
+
+  .result { margin-top: 26px; display: none; }
+  .result.show { display: block; }
+  .result h2 { font: 700 1.4rem "Pixelify Sans", monospace; margin: 0 0 6px; }
+  .result p { margin: 0 0 14px; }
+  .result.error { border-color: var(--warn); box-shadow: 6px 6px 0 var(--warn); }
+  .result.error h2 { color: var(--warn); }
+  .undo {
+    font: 800 .95rem "Nunito"; background: #fff; border: 2px solid var(--ink); padding: 8px 14px; cursor: pointer;
+  }
+  .pin { margin-bottom: 14px; display: none; }
+  .pin.show { display: block; }
+  @media (max-width: 420px) { .row { grid-template-columns: 1fr; } h1 { font-size: 2.2rem; } }
+  @media (prefers-reduced-motion: reduce) { .build.busy span { animation: none; } .build { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Block Buddy</h1>
+  <p class="lede">Say what you want, and it gets built right in front of you.</p>
+
+  <div class="panel">
+    <div class="pin" id="pinWrap">
+      <label for="pin">Grown-up PIN</label>
+      <input id="pin" type="password" inputmode="numeric" autocomplete="off">
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="server">World</label>
+        <select id="server"></select>
+      </div>
+      <div>
+        <label for="player">Who are you?</label>
+        <div class="player">
+          <select id="player"><option value="">Loading…</option></select>
+          <button class="icon-btn" id="refresh" title="Find players" aria-label="Find players">⟳</button>
+        </div>
+      </div>
+    </div>
+
+    <label for="prompt">What should I build?</label>
+    <textarea id="prompt" maxlength="500" placeholder="A treehouse with a rope bridge and a lookout"></textarea>
+    <div class="ideas" id="ideas"></div>
+
+    <button class="build" id="build"><span>Build it!</span></button>
+  </div>
+
+  <div class="panel result" id="result" role="status" aria-live="polite">
+    <h2 id="rTitle"></h2>
+    <p id="rMsg"></p>
+    <button class="undo" id="undo">Undo this build</button>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const IDEAS = ["A castle with a moat", "A cosy cabin", "A rocket ship", "A giant pumpkin house",
+               "An igloo", "A pirate ship", "A lighthouse", "A treehouse"];
+const store = {
+  get: k => { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+};
+
+IDEAS.forEach(t => {
+  const b = document.createElement("button");
+  b.type = "button"; b.textContent = t;
+  b.onclick = () => { $("prompt").value = t; $("prompt").focus(); };
+  $("ideas").appendChild(b);
+});
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || "Something went wrong talking to the server.");
+  return data;
+}
+
+function show(title, msg, isError, canUndo) {
+  $("result").className = "panel result show" + (isError ? " error" : "");
+  $("rTitle").textContent = title;
+  $("rMsg").textContent = msg;
+  $("undo").style.display = canUndo ? "" : "none";
+}
+
+async function loadPlayers() {
+  const sel = $("player");
+  sel.innerHTML = "<option value=''>Looking…</option>";
+  try {
+    const { players } = await api("/api/players?server=" + encodeURIComponent($("server").value));
+    sel.innerHTML = players.length ? "" : "<option value=''>Nobody's playing</option>";
+    players.forEach(p => sel.add(new Option(p, p)));
+    const last = store.get("player");
+    if (players.includes(last)) sel.value = last;
+  } catch (e) {
+    sel.innerHTML = "<option value=''>Couldn't check</option>";
+  }
+}
+
+async function init() {
+  const cfg = await api("/api/config");
+  cfg.servers.forEach(s => $("server").add(new Option(s, s)));
+  if (cfg.servers.includes(store.get("server"))) $("server").value = store.get("server");
+  if (cfg.pin_required) { $("pinWrap").classList.add("show"); $("pin").value = store.get("pin"); }
+  loadPlayers();
+}
+
+$("server").onchange = () => { store.set("server", $("server").value); loadPlayers(); };
+$("player").onchange = () => store.set("player", $("player").value);
+$("refresh").onclick = loadPlayers;
+
+$("build").onclick = async () => {
+  const prompt = $("prompt").value.trim();
+  if (!$("player").value) return show("Who's building?", "Join the world in Minecraft, then tap ⟳ and pick your name.", true, false);
+  if (!prompt) return show("What should I build?", "Type an idea or tap one of the suggestions.", true, false);
+  store.set("pin", $("pin").value);
+  const btn = $("build");
+  btn.disabled = true; btn.classList.add("busy"); btn.firstChild.textContent = "Stacking blocks…";
+  try {
+    const r = await api("/api/build", { method: "POST", body: JSON.stringify({
+      server: $("server").value, player: $("player").value, prompt, pin: $("pin").value }) });
+    const wait = r.seconds > 5 ? ` It'll take about ${r.seconds} seconds to finish appearing.` : "";
+    show(r.title || "Built!", (r.message || "Go and have a look!") + wait, false, true);
+  } catch (e) {
+    show("That didn't build", e.message, true, false);
+  } finally {
+    btn.disabled = false; btn.classList.remove("busy"); btn.firstChild.textContent = "Build it!";
+  }
+};
+
+$("undo").onclick = async () => {
+  try {
+    await api("/api/undo", { method: "POST", body: JSON.stringify({ server: $("server").value, pin: $("pin").value }) });
+    show("Undone", "Everything's back how it was.", false, false);
+  } catch (e) {
+    show("Couldn't undo", e.message, true, false);
+  }
+};
+
+init().catch(e => show("Can't reach Block Buddy", e.message, true, false));
+</script>
+</body>
+</html>
