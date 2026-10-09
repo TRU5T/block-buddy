@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from builder import BuildError, compile_plan
+from redstone_recipes import match_redstone
 
 # ---------- config ----------
 # SERVERS="Lily's World=mc-lily,Jack's World=mc-jack"   (display name = container name)
@@ -320,9 +321,15 @@ async def build(req: BuildReq):
         if left > 1:
             raise HTTPException(409, f"Still building the last thing! Try again in about {math.ceil(left)} seconds.")
         pos, yaw = await asyncio.to_thread(_locate, c, req.player)
-        await asyncio.to_thread(_send, c, [_tell(req.player, f"Block Buddy is thinking about: {prompt}")])
+        recipe = match_redstone(prompt)
+        notice = f"Block Buddy is building: {recipe['title']}" if recipe else f"Block Buddy is thinking about: {prompt}"
+        await asyncio.to_thread(_send, c, [_tell(req.player, notice)])
 
-        plan = await asyncio.to_thread(_request_plan, prompt)
+        if recipe:
+            log.info("redstone recipe: %s", recipe["title"])
+            plan = recipe
+        else:
+            plan = await asyncio.to_thread(_request_plan, prompt)
         if not plan:
             raise HTTPException(502, "The builder didn't come back with a plan. Try again.")
 
@@ -333,7 +340,11 @@ async def build(req: BuildReq):
 
         slot = "bb_undo_" + re.sub(r"[^a-z0-9]", "", req.server.lower())[:20]
         save = f"structure save {slot} {bb[0]} {bb[1]} {bb[2]} {bb[3]} {bb[4]} {bb[5]} false memory true"
-        done = _tell(req.player, f"Ta-da! {plan.get('title', 'Your build')} is ready.")
+        if plan.get("recipe"):
+            cheer = plan.get("message") or "Ta-da!"
+        else:
+            cheer = f"Ta-da! {plan.get('title', 'Your build')} is ready."
+        done = _tell(req.player, cheer)
         await asyncio.to_thread(_send, c, [save, *cmds, done])
         seconds = math.ceil((len(cmds) + 2) / CMDS_PER_SEC)
         busy_until[req.server] = time.time() + seconds

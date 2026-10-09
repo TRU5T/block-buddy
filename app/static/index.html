@@ -137,7 +137,8 @@
 <script>
 const $ = id => document.getElementById(id);
 const IDEAS = ["A castle with a moat", "A cosy cabin", "A rocket ship", "A giant pumpkin house",
-               "An igloo", "A pirate ship", "A lighthouse", "A treehouse"];
+               "An igloo", "A pirate ship", "A lighthouse", "A treehouse",
+               "A piston door", "A lever and a lamp", "A doorbell", "A motion alarm"];
 const store = {
   get: k => { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
