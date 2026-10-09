@@ -83,6 +83,12 @@ BUILD_TOOL = {
                         "mode": {"type": "string", "enum": ["solid", "hollow", "outline", "walls"]},
                         "hollow": {"type": "boolean"},
                         "dome": {"type": "boolean"},
+                        "face": {
+                            "type": "string",
+                            "enum": ["forward", "back", "left", "right", "up", "down"],
+                            "description": "Which way a redstone component points: forward is away from the child",
+                        },
+                        "delay": {"type": "integer", "description": "Repeater delay in redstone ticks, from 1 to 4"},
                     },
                     "required": ["op"],
                 },
