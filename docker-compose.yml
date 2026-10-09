@@ -1,0 +1,12 @@
+services:
+  block-buddy:
+    image: ghcr.io/tru5t/block-buddy:latest
+    build: .
+    container_name: block-buddy
+    restart: unless-stopped
+    ports:
+      - "8090:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    env_file:
+      - .env

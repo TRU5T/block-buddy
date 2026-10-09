@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommunityApplications>
+  <Profile>Block Buddy is a kid-friendly page that turns a sentence into a Minecraft Bedrock build, using the itzg Bedrock server containers already running on Unraid. Support and source are on GitHub.</Profile>
+  <Icon>https://raw.githubusercontent.com/TRU5T/block-buddy/main/icon.png</Icon>
+  <WebPage>https://github.com/TRU5T/block-buddy</WebPage>
+</CommunityApplications>

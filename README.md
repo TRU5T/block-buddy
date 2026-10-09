@@ -1,60 +1,146 @@
-# Block Buddy
+<p align="center">
+  <img src="icon.png" width="160" alt="Block Buddy, a smiling grass block holding a torch">
+</p>
 
-A kid-friendly web page where you type "build me a castle with a moat" and it appears
-in front of you in your Minecraft Bedrock world. Claude designs the build, and the app
-turns it into vanilla /fill and /setblock commands, sent through the server console.
-There are no mods or addons, and cheats can stay off.
+<h1 align="center">Block Buddy</h1>
 
-## How it works
-1. The page asks the server `list` to find who's online.
-2. On Build, it runs `querytarget` to get the player's position and which way they face.
-3. Claude returns a plan made of simple shapes (box, cylinder, sphere, pyramid, clear, block).
-4. builder.py rotates the plan to face the player, places it 3 blocks in front of them,
-   and turns it into commands, split to stay under Bedrock's 32,768-block /fill limit.
-5. Before building, it saves the area with `structure save`, so Undo can restore it.
+<p align="center">
+  Say what you want. It gets built in your Minecraft Bedrock world.
+</p>
 
-## Setup on Unraid
+<p align="center">
+  <a href="https://github.com/TRU5T/block-buddy/pkgs/container/block-buddy"><img alt="Container image" src="https://img.shields.io/badge/ghcr.io-tru5t%2Fblock--buddy-2496ED?logo=docker&logoColor=white"></a>
+  <a href="block-buddy.xml"><img alt="Unraid template" src="https://img.shields.io/badge/Unraid-Docker_template-F15A2C"></a>
+  <a href="https://github.com/TRU5T/block-buddy/issues"><img alt="Support" src="https://img.shields.io/badge/support-GitHub_issues-1f2a33"></a>
+</p>
 
-Copy this folder to `/mnt/user/appdata/block-buddy`, then in the Unraid terminal:
+<p align="center">
+  <img src="docs/screenshot.png" width="720" alt="The Block Buddy page: pick a world, pick who's playing, and describe a build">
+</p>
 
-    cd /mnt/user/appdata/block-buddy
-    docker build -t block-buddy .
+A kid types "build me a castle with a moat" on a phone or tablet. Claude designs it, and Block Buddy places it in front of them with vanilla `/fill` and `/setblock` commands. There are no mods or addons, and cheats can stay off.
 
-    docker run -d --name block-buddy --restart unless-stopped \
-      -p 8090:8080 \
-      -v /var/run/docker.sock:/var/run/docker.sock \
-      -e ANTHROPIC_API_KEY=sk-ant-... \
-      -e SERVERS="Lily's World=mc-lily,Jack's World=mc-jack" \
-      -e PIN=1234 \
-      block-buddy
+It talks to your [itzg/minecraft-bedrock-server](https://github.com/itzg/docker-minecraft-bedrock-server) containers through the Docker socket, so the Minecraft servers can sit on their own IPs and Block Buddy still reaches the console.
 
-Open http://<unraid-ip>:8090 on a phone or tablet.
+## Install on Unraid
 
-Environment variables:
-- `SERVERS`: comma-separated `Display name=container name` pairs. Container names must match
-  your itzg/minecraft-bedrock-server containers exactly.
-- `ANTHROPIC_API_KEY`: from console.anthropic.com.
-- `MODEL`: optional, defaults to claude-sonnet-5-5. An Opus model gives fancier builds but
-  is slower and costs more.
-- `PIN`: optional. If set, the page asks for it once and remembers it on that device.
+The container image is `ghcr.io/tru5t/block-buddy:latest`. Unraid is x86_64, which is the architecture the image is built for.
 
-After editing any code, rebuild the image and recreate the container.
+The template is [`block-buddy.xml`](block-buddy.xml). It publishes the page on host port **8090**, mounts the Docker socket, and asks for your API key and server list.
 
-## Notes
-- The Docker socket gives this container control of Docker on the host. Keep it on your
-  LAN only. Don't port-forward it.
-- The Minecraft containers can be on br0 with their own IPs. Block Buddy talks to them
-  through Docker, not the network.
-- The Bedrock containers must be created with an interactive console. In Unraid, add `-it`
-  to Extra Parameters. Without it, builds fail with "the server has no console input".
-- Block Buddy writes commands straight to the server's console as the server's own user
-  (e.g. UID 99:100 on Unraid). It doesn't use the image's `send-command`, which fails when the
-  server isn't running as root.
-- The server runs about 20 commands a second, so a big build takes up to ~2 minutes to
-  finish appearing. A new build in the same world is refused until the last one is done.
-- If one block type never appears, Bedrock probably uses a different ID for it. Fix the name
-  in app/prompt.md. Invalid blocks only skip that command, and the rest of the build still runs.
-- Undo restores only the most recent build per world, and only until the app restarts.
-- The build needs to be near the player so its chunks are loaded. It always is, because it's
-  placed right in front of them.
-- Cost is roughly a few cents per build with Sonnet.
+### 1. Make the image public
+
+GitHub publishes the image on every push to `main`. A new package starts out private, and Unraid cannot pull a private image.
+
+After the first successful [Publish image](https://github.com/TRU5T/block-buddy/actions/workflows/docker.yml) run:
+
+1. Open the [block-buddy package](https://github.com/TRU5T/block-buddy/pkgs/container/block-buddy).
+2. Package settings → Change visibility → Public.
+
+### 2. Add the template
+
+On Unraid, go to **Settings → Docker** and add this to **Template repositories**:
+
+```text
+https://github.com/TRU5T/block-buddy
+```
+
+Then **Docker → Add Container**, and pick **block-buddy** in the template dropdown.
+
+Or, from the Unraid terminal, drop it straight into user templates:
+
+```bash
+mkdir -p /boot/config/plugins/dockerMan/templates-user
+wget -O /boot/config/plugins/dockerMan/templates-user/my-block-buddy.xml \
+  https://raw.githubusercontent.com/TRU5T/block-buddy/main/block-buddy.xml
+```
+
+**Docker → Add Container**, then choose **block-buddy** under **User templates**.
+
+### 3. Fill in the container
+
+| Field | Example | What it does |
+| --- | --- | --- |
+| Web UI | `8090` | The page, at `http://YOUR-UNRAID-IP:8090` |
+| Docker Socket | `/var/run/docker.sock` | How Block Buddy reaches the Bedrock consoles. Leave this mounted. |
+| Anthropic API Key | `sk-ant-...` | From [console.anthropic.com](https://console.anthropic.com). A build costs a few cents on Sonnet. |
+| Servers | `Lily's World=mc-lily,Jack's World=mc-jack` | Display name, then `=`, then the container name. Names must match exactly. |
+| PIN | `1234` | Optional. The page asks once and remembers it on that device. |
+| Model | `claude-sonnet-5-5` | Advanced. An Opus model makes fancier builds, more slowly, and costs more. |
+
+Apply. Open the WebUI on a phone or tablet that is on the same LAN.
+
+### 4. Give each Bedrock container a console
+
+Block Buddy writes commands to the server's own console. The itzg container only has one when it was created with an interactive terminal.
+
+On each Bedrock container, set **Extra Parameters** to include `-it`, then Apply so Unraid recreates it. Without that, builds fail with "the server has no console input".
+
+Cheats can stay off. Block Buddy does not use the image's `send-command` helper, which fails when the server is not running as root. On Unraid that is usually UID 99, GID 100.
+
+## What a build does
+
+```mermaid
+flowchart LR
+  page[Phone or tablet]
+  buddy[Block Buddy]
+  claude[Claude]
+  console[Bedrock console]
+  world[The world]
+
+  page -->|what to build| buddy
+  buddy -->|who is online, and where they stand| console
+  buddy -->|the idea| claude
+  claude -->|boxes, towers, spheres| buddy
+  buddy -->|fill and setblock| console
+  console --> world
+```
+
+1. The page asks the server `list` to find who is online.
+2. On Build, it runs `querytarget` for that player's position and which way they face.
+3. Claude returns a plan made of simple shapes: box, cylinder, sphere, pyramid, clear, and single blocks.
+4. The plan is rotated to face the player, placed 3 blocks in front of them, and split so each `/fill` stays under Bedrock's 32,768-block limit.
+5. Before anything is placed, the area is saved with `structure save`, so Undo can put it back.
+
+## Good to know
+
+- Keep Block Buddy on your LAN. Do not port-forward it. The Docker socket gives this container control of Docker on the host.
+- The Bedrock containers can use their own IPs on `br0`. Block Buddy talks to them through Docker, not the network.
+- The server runs about 20 commands a second, so a large build can take up to a couple of minutes to finish appearing. A new build in the same world waits until the last one is done.
+- If one block type never appears, Bedrock is using a different ID. The names live in [`app/prompt.md`](app/prompt.md). A bad ID skips that command, and the rest of the build still runs.
+- Undo restores only the most recent build in that world, and only until the app restarts.
+- The build is placed in front of the player, so the chunks are loaded.
+- Builds stay friendly. A request that is unkind, gory, or huge becomes a smaller kind version instead.
+
+## Compose
+
+```bash
+cp .env.example .env
+# edit .env, then:
+docker compose up -d --build
+```
+
+[`docker-compose.yml`](docker-compose.yml) builds from this repo and publishes port 8090. The same file works with Unraid's Compose plugin.
+
+## Build it on the Unraid box
+
+If you would rather not pull from the registry:
+
+```bash
+cd /mnt/user/appdata/block-buddy
+docker build -t block-buddy .
+
+docker run -d --name block-buddy --restart unless-stopped \
+  -p 8090:8080 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e ANTHROPIC_API_KEY=sk-ant-... \
+  -e SERVERS="Lily's World=mc-lily,Jack's World=mc-jack" \
+  -e PIN=1234 \
+  block-buddy
+```
+
+After you change the code, rebuild the image and recreate the container.
+
+## Community Apps
+
+This repo is laid out for an Unraid Community Apps submission: [`block-buddy.xml`](block-buddy.xml) is the template, [`ca_profile.xml`](ca_profile.xml) is the maintainer profile, and [`icon.png`](icon.png) is the icon. Submit it from [ca.unraid.net/submit](https://ca.unraid.net/submit) once the image is public.

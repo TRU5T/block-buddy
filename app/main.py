@@ -185,9 +185,17 @@ class UndoReq(BaseModel):
     pin: str = ""
 
 
+_STATIC = Path(__file__).with_name("static")
+
+
 @app.get("/")
 def index():
-    return FileResponse(Path(__file__).with_name("static") / "index.html")
+    return FileResponse(_STATIC / "index.html")
+
+
+@app.get("/icon.png")
+def icon():
+    return FileResponse(_STATIC / "icon.png", media_type="image/png")
 
 
 @app.get("/api/config")

@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>block-buddy</Name>
+  <Repository>ghcr.io/tru5t/block-buddy:latest</Repository>
+  <Registry>https://github.com/TRU5T/block-buddy/pkgs/container/block-buddy</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/TRU5T/block-buddy/issues</Support>
+  <Project>https://github.com/TRU5T/block-buddy</Project>
+  <Overview>A kid-friendly page that builds what you describe in a Minecraft Bedrock world. Claude designs the build, and Block Buddy turns it into vanilla commands sent through your itzg Bedrock server console. No mods, and cheats can stay off.</Overview>
+  <Category>GameServers:</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/TRU5T/block-buddy/main/block-buddy.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/TRU5T/block-buddy/main/icon.png</Icon>
+  <Screenshot>https://raw.githubusercontent.com/TRU5T/block-buddy/main/docs/screenshot.png</Screenshot>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>An itzg/minecraft-bedrock-server container created with -it in Extra Parameters, so the server has a console. An Anthropic API key. Keep Block Buddy on your LAN and do not port-forward it: the Docker socket lets this container control Docker on the host.</Requires>
+  <ReadMe>https://raw.githubusercontent.com/TRU5T/block-buddy/main/README.md</ReadMe>
+  <ExtraSearchTerms>minecraft bedrock build kids claude anthropic itzg blocks builder</ExtraSearchTerms>
+  <MinVer>6.10.0</MinVer>
+  <Changes>### 2026-10-09
+- First Unraid template. Web UI on port 8090, Docker socket, Anthropic API key, server list, optional PIN, and model.
+</Changes>
+  <Config Name="Web UI" Target="8080" Default="8090" Mode="tcp" Description="Browser port for the Block Buddy page." Type="Port" Display="always" Required="true" Mask="false">8090</Config>
+  <Config Name="Docker Socket" Target="/var/run/docker.sock" Default="/var/run/docker.sock" Mode="rw" Description="Required. Block Buddy sends build commands to your Bedrock containers through Docker. Do not expose this app to the internet." Type="Path" Display="always" Required="true" Mask="false">/var/run/docker.sock</Config>
+  <Config Name="Anthropic API Key" Target="ANTHROPIC_API_KEY" Default="" Mode="" Description="From console.anthropic.com. Used to design each build." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Servers" Target="SERVERS" Default="Lily's World=mc-lily" Mode="" Description="Comma-separated Display name=container name pairs. The container name must match the Bedrock container exactly." Type="Variable" Display="always" Required="true" Mask="false">Lily's World=mc-lily</Config>
+  <Config Name="PIN" Target="PIN" Default="" Mode="" Description="Optional. If set, the page asks for it once and remembers it on that device." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Model" Target="MODEL" Default="claude-sonnet-5-5" Mode="" Description="Claude model. Sonnet is the default. An Opus model makes fancier builds, more slowly, and costs more." Type="Variable" Display="advanced" Required="false" Mask="false">claude-sonnet-5-5</Config>
+</Container>
