@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import math
 import os
 import re
@@ -43,6 +44,7 @@ printf '%s\n' "$@" > "$p/fd/0"
 """
 
 app = FastAPI()
+log = logging.getLogger("uvicorn.error")
 dk = docker.from_env()
 llm = anthropic.Anthropic()
 locks = {name: asyncio.Lock() for name in SERVERS}
@@ -188,33 +190,74 @@ def _plan_from(resp):
     return next((b.input for b in resp.content if b.type == "tool_use" and b.name == "submit_build"), None)
 
 
-def _request_plan(prompt):
-    messages = [{"role": "user", "content": prompt}]
-    choice = _tool_choice(MODEL)
-
-    def create(tool_choice):
-        return llm.messages.create(
-            model=MODEL,
-            max_tokens=8000,
-            system=SYSTEM_PROMPT,
-            tools=[BUILD_TOOL],
-            tool_choice=tool_choice,
-            messages=messages,
+def _log_turn(resp):
+    usage = getattr(resp, "usage", None)
+    if usage is not None:
+        log.info(
+            "claude stop=%s in=%s out=%s",
+            resp.stop_reason,
+            getattr(usage, "input_tokens", "?"),
+            getattr(usage, "output_tokens", "?"),
         )
+    for block in resp.content:
+        if block.type == "thinking":
+            text = (getattr(block, "thinking", None) or "").strip()
+            log.info("thinking:\n%s", text or "(empty)")
+        elif block.type == "text" and (block.text or "").strip():
+            log.info("reply:\n%s", block.text.strip())
+        elif block.type == "tool_use":
+            log.info("tool %s:\n%s", block.name, json.dumps(block.input, indent=2, ensure_ascii=False))
 
-    try:
-        resp = create(choice)
-    except anthropic.BadRequestError as e:
-        if choice["type"] == "auto" or "not supported for this model" not in str(e):
+
+def _create_message(messages, tool_choice, with_thinking):
+    kwargs = dict(
+        model=MODEL,
+        max_tokens=8000,
+        system=SYSTEM_PROMPT,
+        tools=[BUILD_TOOL],
+        tool_choice=tool_choice,
+        messages=messages,
+    )
+    # Default display is "omitted", which returns thinking blocks with empty text.
+    if with_thinking:
+        kwargs["thinking"] = {"type": "adaptive", "display": "summarized"}
+    return llm.messages.create(**kwargs)
+
+
+def _create_logged(messages, tool_choice):
+    """Call the model. Drop thinking display or forced tool choice if this model rejects them."""
+    with_thinking = True
+    choice = tool_choice
+    while True:
+        try:
+            resp = _create_message(messages, choice, with_thinking)
+        except anthropic.BadRequestError as e:
+            msg = str(e)
+            if with_thinking and "thinking" in msg.lower():
+                with_thinking = False
+                log.warning("model rejected thinking display; retrying without it")
+                continue
+            if choice["type"] != "auto" and "not supported for this model" in msg:
+                choice = {"type": "auto"}
+                log.warning("model rejected forced tool choice; retrying with auto")
+                continue
             raise
-        choice = {"type": "auto"}
-        resp = create(choice)
+        _log_turn(resp)
+        return resp, choice
+
+
+def _request_plan(prompt):
+    log.info("build prompt: %s", prompt)
+    messages = [{"role": "user", "content": prompt}]
+    resp, choice = _create_logged(messages, _tool_choice(MODEL))
     plan = _plan_from(resp)
     if plan is None and choice["type"] == "auto":
         # Keep the assistant turn intact so thinking blocks stay valid, then ask once more.
+        log.info("no plan in the first reply; asking again")
         messages.append({"role": "assistant", "content": resp.content})
         messages.append({"role": "user", "content": "Call the submit_build tool now with the complete plan."})
-        plan = _plan_from(create(choice))
+        resp, _choice = _create_logged(messages, choice)
+        plan = _plan_from(resp)
     return plan
 
 
